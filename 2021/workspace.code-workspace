@@ -1,0 +1,47 @@
+{
+	"folders": [
+    {"path":"a01", "name": "Day 1"},
+    {"path":"a02", "name": "Day 2"},
+    {"path":"a02part2", "name": "Day 2 part 2"},
+    {"path":"a03p1", "name": "Day 3 part 2"},
+    {"path":"a03p2", "name": "Day 4 part 2"},
+    {"path":"a04/part1","name":"Day 4 part 1"},
+    {"path":"a05/part1","name":"Day 5 part 1"},
+    {"path":"a05/part2","name":"Day 5 part 2"},
+    {"path":"a06/part1","name":"Day 6 part 1"},
+    {"path":"a06/part2","name":"Day 6 part 2"},
+    {"path":"a07/part1","name":"Day 7 part 1"},
+    {"path":"a08/part1","name":"Day 8 part 1"},
+    {"path":"a09/part1","name":"Day 9 part 1"},
+    {"path":"a09/part2","name":"Day 9 part 2"},
+    {"path":"a10/part1","name":"Day 10 part 1"},
+    {"path":"a11/part1","name":"Day 11 part 1"},
+    {"path":"a12/part1","name":"Day 12 part 1"},
+    {"path":"a12/part2","name":"Day 12 part 2"},
+    {"path":"a13/part1","name":"Day 13 part 1"},
+    {"path":"a14/part1","name":"Day 14 part 1"},
+    {"path":"a14/part2","name":"Day 14 part 2"},
+    {"path":"a15/part1","name":"Day 15 part 1"},
+    {"path":"a15/part2","name":"Day 15 part 2"},
+    {"path":"a16/part1","name":"Day 16 part 1"},
+    {"path":"a17/part1","name":"Day 17 part 1"},
+    {"path":"a17/part2","name":"Day 17 part 2"},
+    {"path":"a18/part1","name":"Day 18 part 1"},
+    {"path":"a19/part1","name":"Day 19 part 1"},
+    {"path":"a20/part1","name":"Day 20 part 1"},
+    {"path":"a21/part1","name":"Day 21 part 1"},
+    {"path":"a21/part2","name":"Day 21 part 2"},
+    {"path":"a22/part1","name":"Day 22 part 1"},
+    {"path":"a23/part1","name":"Day 23 part 1"},
+    {"path":"a23/part2","name":"Day 23 part 2"},
+    {"path":"a24/part1","name":"Day 24 part 1"},
+    {"path":"a25/part1","name":"Day 25 part 1"},
+    ],
+    "settings": {
+        "search.useIgnoreFiles": false,
+        "explorer.excludeGitIgnore": false,
+        "search.exclude": {
+            "**/target": true
+        }
+    }
+}
