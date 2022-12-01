@@ -1,0 +1,16 @@
+{
+  "folders": [
+    {
+      "path": "d01",
+      "name": "Day 1"
+    }
+  ],
+  "settings": {
+    "search.useIgnoreFiles": false,
+    "explorer.excludeGitIgnore": false,
+    "editor.formatOnSave": true,
+    "search.exclude": {
+      "**/target": true
+    }
+  }
+}
