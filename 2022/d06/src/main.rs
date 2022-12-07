@@ -9,12 +9,10 @@ fn is_marker(bytes: &[u8]) -> bool {
 }
 
 fn find_marker(bytes: &[u8], marker_size: usize) -> Option<usize> {
-    for i in 0..bytes.len() - marker_size {
-        if is_marker(&bytes[i..i + marker_size]) {
-            return Some(i + marker_size);
-        }
-    }
-    None
+    bytes
+        .windows(marker_size)
+        .position(is_marker)
+        .and_then(|x| Some(x + marker_size))
 }
 
 fn main() {
