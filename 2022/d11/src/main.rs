@@ -1,8 +1,30 @@
-use std::mem;
+use std::{
+    io::{self, Read},
+    mem,
+    str::FromStr,
+};
 
+#[derive(Debug)]
+enum Operation {
+    Add(u32),
+    Mul(u32),
+    Pow2(),
+}
+
+impl Operation {
+    fn apply(&self, value: u64) -> u64 {
+        match self {
+            Operation::Add(x) => value + (*x as u64),
+            Operation::Mul(x) => value * (*x as u64),
+            Operation::Pow2() => value * value,
+        }
+    }
+}
+
+#[derive(Debug)]
 struct Behaviour {
     initial_items: Vec<u32>,
-    operation: fn(u64) -> u64,
+    operation: Operation,
     divisor: u32,
     dst_true: usize,
     dst_false: usize,
@@ -15,27 +37,73 @@ struct Monkey<'a> {
 }
 
 impl Behaviour {
-    fn new(
-        items: &[u32],
-        operation: fn(u64) -> u64,
-        divisor: u32,
-        dst_true: usize,
-        dst_false: usize,
-    ) -> Behaviour {
-        Behaviour {
-            initial_items: items.into(),
-            operation,
-            divisor,
-            dst_true,
-            dst_false,
-        }
-    }
-
     fn monkey(&self) -> Monkey {
         Monkey {
             items: self.initial_items.clone(),
             items_inspected: 0,
             behaviour: self,
+        }
+    }
+}
+
+impl FromStr for Behaviour {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut lines = s.split('\n');
+        assert!(lines.next().unwrap().starts_with("Monkey "));
+
+        let line1 = lines.next().unwrap();
+        assert!(line1.starts_with("  Starting items: "));
+        let initial_items = line1[18..]
+            .split(|c| c == ' ' || c == ',')
+            .filter(|w| !w.is_empty())
+            .map(|w| w.parse::<u32>().unwrap())
+            .collect::<Vec<_>>();
+
+        let operation = Operation::from_str(lines.next().unwrap()).unwrap();
+
+        let line3 = lines.next().unwrap();
+        assert!(line3.starts_with("  Test: divisible by "));
+        let divisor = line3.split(' ').last().unwrap().parse::<u32>().unwrap();
+
+        let line4 = lines.next().unwrap();
+        assert!(line4.starts_with("    If true: throw to monkey "));
+        let dst_true = line4.split(' ').last().unwrap().parse::<usize>().unwrap();
+
+        let line5 = lines.next().unwrap();
+        assert!(line5.starts_with("    If false: throw to monkey "));
+        let dst_false = line5.split(' ').last().unwrap().parse::<usize>().unwrap();
+
+        Ok(Behaviour {
+            initial_items,
+            operation,
+            divisor,
+            dst_true,
+            dst_false,
+        })
+    }
+}
+
+impl FromStr for Operation {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        assert!(s.starts_with("  Operation: new = old "));
+        let mut words = s[23..].split(' ');
+        let op = {
+            let op_word = words.next().unwrap();
+            assert!(op_word.eq("*") || op_word.eq("+"));
+            op_word.chars().next().unwrap()
+        };
+        let operand = words.next().unwrap();
+        let operand_parsed = operand.parse::<u32>();
+        assert!(operand.eq("old") || operand_parsed.is_ok());
+        match (op, operand_parsed.ok()) {
+            ('+', Some(value)) => Ok(Operation::Add(value)),
+            ('*', Some(value)) => Ok(Operation::Mul(value)),
+            ('*', None) => Ok(Operation::Pow2()),
+            _ => Err(format!("Invalid operation line: {}", s)),
         }
     }
 }
@@ -49,13 +117,13 @@ fn play_round(monkeys: &mut [Monkey], mode: &GameMode) {
     for i in 0..monkeys.len() {
         let items = mem::take(&mut monkeys[i].items);
         monkeys[i].items_inspected += items.len();
-        let mb = &monkeys[i].behaviour;
+        let mb = monkeys[i].behaviour;
         for item in items {
             let new_item = match mode {
                 GameMode::Long { common_divisor } => {
-                    ((mb.operation)(item as u64) % common_divisor) as u32
+                    (mb.operation.apply(item as u64) % common_divisor) as u32
                 }
-                GameMode::Short => ((mb.operation)(item as u64) / 3) as u32,
+                GameMode::Short => (mb.operation.apply(item as u64) / 3) as u32,
             };
             let dst = if new_item % mb.divisor == 0 {
                 mb.dst_true
@@ -118,35 +186,24 @@ fn business_level(monkeys: &[Monkey]) -> usize {
     inspected[0] * inspected[1]
 }
 
-fn play_check(rounds: usize, monkeys: &[Behaviour], expected_level: usize) {
-    let level = play_rounds(rounds, monkeys);
-    assert_eq!(level, expected_level);
+fn read_input() -> Vec<Behaviour> {
+    let mut buf = String::new();
+    io::stdin()
+        .read_to_string(&mut buf)
+        .expect("Error reading input");
+    buf.split("\n\n")
+        .map(Behaviour::from_str)
+        .map(Result::unwrap)
+        .collect()
 }
 
 fn main() {
-    // test
-    let monkeys0 = [
-        Behaviour::new(&[79, 98], |old| old * 19, 23, 2, 3),
-        Behaviour::new(&[54, 65, 75, 74], |old| old + 6, 19, 2, 0),
-        Behaviour::new(&[79, 60, 97], |old| old * old, 13, 1, 3),
-        Behaviour::new(&[74], |old| old + 3, 17, 0, 1),
-    ];
+    let input = read_input();
 
-    // input
-    let monkeys1 = [
-        Behaviour::new(&[72, 97], |old| old * 13, 19, 5, 6),
-        Behaviour::new(&[55, 70, 90, 74, 95], |old| old * old, 7, 5, 0),
-        Behaviour::new(&[74, 97, 66, 57], |old| old + 6, 17, 1, 0),
-        Behaviour::new(&[86, 54, 53], |old| old + 2, 13, 1, 2),
-        Behaviour::new(&[50, 65, 78, 50, 62, 99], |old| old + 3, 11, 3, 7),
-        Behaviour::new(&[90], |old| old + 4, 2, 4, 6),
-        Behaviour::new(&[88, 92, 63, 94, 96, 82, 53, 53], |old| old + 8, 5, 4, 7),
-        Behaviour::new(&[70, 60, 71, 69, 77, 70, 98], |old| old * 7, 3, 2, 3),
-    ];
+    let part1 = play_rounds(20, input.as_slice());
+    println!("---");
+    let part2 = play_rounds(10000, input.as_slice());
 
-    play_check(20, &monkeys0, 10605);
-    play_check(20, &monkeys1, 58056);
-    play_check(10000, &monkeys0, 2713310158);
-    play_check(10000, &monkeys1, 15048718170);
-    println!("all ok!");
+    println!("Part 1: {}", part1);
+    println!("Part 2: {}", part2);
 }
