@@ -2,6 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
     io::{self, BufRead},
+    iter::once,
     str::FromStr,
 };
 
@@ -86,21 +87,10 @@ fn read_input() -> Valves {
         .collect()
 }
 
+#[derive(Clone, Copy)]
 enum Move {
-    Go(ValveID),
+    Go(ValveID, ValveID),
     Open(ValveID),
-}
-
-macro_rules! go {
-    ($vid:ident) => {
-        Move::Go(valve_id(stringify!($vid)))
-    };
-}
-
-macro_rules! open {
-    ($vid:ident) => {
-        Move::Open(valve_id(stringify!($vid)))
-    };
 }
 
 fn total_pressure_released(valves: &Valves, mut time: usize, mut path: &[Move]) -> usize {
@@ -111,7 +101,7 @@ fn total_pressure_released(valves: &Valves, mut time: usize, mut path: &[Move]) 
     while path.len() > 0 {
         total += flow;
         time -= 1;
-        if let Move::Go(next) = path[0] {
+        if let Move::Go(next, _) = path[0] {
             assert!(valves.get(&pos).unwrap().has_tunnel(next));
             pos = next;
         } else if let Move::Open(valve) = path[0] {
@@ -169,27 +159,6 @@ fn cache_paths(valves: &Valves, between: &Vec<(ValveID, ValveID)>) -> PathCache 
         cache.insert((*from, *to), find_path(valves, from, to));
     }
     cache
-}
-
-fn path_opening(
-    valves: &Valves,
-    cache: &PathCache,
-    mut opening: &[ValveID],
-    mut from: ValveID,
-    max_steps: usize,
-) -> Vec<Move> {
-    let mut moves = vec![];
-    while opening.len() > 0 && moves.len() < max_steps {
-        let to = opening[0];
-        for i in find_cached_path(cache, &from, &to).iter().skip(1) {
-            moves.push(Move::Go(*i));
-        }
-        moves.push(Move::Open(to));
-        from = to;
-        opening = &opening[1..];
-    }
-
-    moves
 }
 
 fn find_best_part(
@@ -256,13 +225,239 @@ fn part1(valves: &Valves, time: usize) -> usize {
     find_best_part(valves, &path_cache, &from, time, 0, 0, left_to_open)
 }
 
-fn print_path(path: &Vec<Move>) {
-    for m in path {
-        let (m, x) = match m {
-            Move::Go(x) => ("Move", valve_name(x)),
-            Move::Open(x) => ("Open", valve_name(x)),
-        };
-        println!("{}({})", m, x);
+#[derive(Clone)]
+struct Actor<'a> {
+    pos: ValveID,
+    path: &'a [ValveID],
+    moves: Vec<Move>,
+}
+
+impl<'a> Actor<'a> {
+    fn next(&self) -> Actor {
+        if self.path.is_empty() {
+            return self.clone();
+        }
+        Actor {
+            pos: self.path[0],
+            path: &self.path[1..],
+            moves: self
+                .moves
+                .iter()
+                .map(|m| *m)
+                .chain(once(Move::Go(self.path[0], *self.path.last().unwrap())))
+                .collect(),
+        }
+    }
+
+    fn destination(&self) -> Option<ValveID> {
+        self.path.last().map(|i| *i)
+    }
+}
+
+fn find_best_2<'a>(
+    valves: &Valves,
+    paths: &'a PathCache,
+    actors: [Actor<'a>; 2],
+    step: usize,
+    time: usize,
+    opening: &Vec<ValveID>,
+    flow: usize,
+    acc_flow: usize,
+    left_to_open: &Vec<ValveID>,
+) -> (usize, Vec<Move>, Vec<Move>) {
+    if step == 2 || (step == 1 && actors[1].pos == [0, 0]) {
+        // next step
+        if time == 0 {
+            assert!(opening.is_empty());
+            return (acc_flow, actors[0].moves.to_vec(), actors[1].moves.to_vec());
+        } else if left_to_open.is_empty() {
+            assert!(opening.is_empty());
+            return (
+                acc_flow + flow * time,
+                actors[0].moves.to_vec(),
+                actors[1].moves.to_vec(),
+            );
+        }
+
+        let opening_flow: usize = opening
+            .iter()
+            .map(|v| valves.get(v).unwrap())
+            .map(|v| v.flow_rate)
+            .sum();
+
+        return find_best_2(
+            valves,
+            paths,
+            actors,
+            0,
+            time - 1,
+            &vec![],
+            flow + opening_flow,
+            acc_flow + flow,
+            &left_to_open
+                .iter()
+                .filter(|&v| !opening.contains(v))
+                .map(|v| *v)
+                .collect::<Vec<_>>(),
+        );
+    }
+
+    let actor = actors[step].clone();
+    if actor.path.is_empty() {
+        // reached end of path
+        if left_to_open.contains(&actor.pos) && !opening.contains(&actor.pos) {
+            // open valve
+            let next_actor = Actor {
+                pos: actor.pos,
+                path: actor.path,
+                moves: actor
+                    .moves
+                    .iter()
+                    .map(|m| *m)
+                    .chain(once(Move::Open(actor.pos)))
+                    .collect_vec(),
+            };
+            return find_best_2(
+                valves,
+                paths,
+                match step {
+                    0 => [next_actor, actors[1].clone()],
+                    1 => [actors[0].clone(), next_actor],
+                    _ => panic!(),
+                },
+                step + 1,
+                time,
+                &opening.iter().chain(once(&actor.pos)).map(|v| *v).collect(),
+                flow,
+                acc_flow,
+                left_to_open,
+            );
+        } else {
+            // already opened - chose new path
+            let mut max = (
+                acc_flow + flow * time,
+                actors[0].moves.to_vec(),
+                actors[1].moves.to_vec(),
+            );
+            let from = &actor.pos;
+            for next in left_to_open.into_iter().filter(|&&v| {
+                v != *from
+                    && Some(v) != actors[0].destination()
+                    && Some(v) != actors[1].destination()
+            }) {
+                // is path feasible?
+                let path = find_cached_path(paths, from, &next);
+                if path.len() > time {
+                    continue;
+                }
+                // take path
+                let next_actor = Actor {
+                    pos: path[1],
+                    path: &path[2..],
+                    moves: actor
+                        .moves
+                        .iter()
+                        .map(|m| *m)
+                        .chain(once(Move::Go(path[1], *path.last().unwrap())))
+                        .collect_vec(),
+                };
+                let next_max = find_best_2(
+                    valves,
+                    paths,
+                    match step {
+                        0 => [next_actor, actors[1].clone()],
+                        1 => [actors[0].clone(), next_actor],
+                        _ => panic!(),
+                    },
+                    step + 1,
+                    time,
+                    opening,
+                    flow,
+                    acc_flow,
+                    left_to_open,
+                );
+                if next_max.0 > max.0 {
+                    max = next_max;
+                }
+            }
+            return max;
+        }
+    } else {
+        // move to next step
+        return find_best_2(
+            valves,
+            paths,
+            match step {
+                0 => [actor.next(), actors[1].clone()],
+                1 => [actors[0].clone(), actor.next()],
+                _ => panic!(),
+            },
+            step + 1,
+            time,
+            opening,
+            flow,
+            acc_flow,
+            left_to_open,
+        );
+    }
+}
+
+fn part2(valves: &Valves, time: usize) -> usize {
+    let left_to_open = valves
+        .values()
+        .filter(|v| v.flow_rate > 0)
+        .map(|v| v.id)
+        .collect::<Vec<_>>();
+    let path_cache = cache_paths(
+        valves,
+        &valves
+            .keys()
+            .permutations(2)
+            .map(|p| (*p[0], *p[1]))
+            .collect::<Vec<_>>(),
+    );
+    let from = valve_id("AA");
+
+    let (max, m0, m1) = find_best_2(
+        valves,
+        &path_cache,
+        [
+            Actor {
+                pos: from,
+                path: &[],
+                moves: vec![],
+            },
+            Actor {
+                pos: from,
+                path: &[],
+                moves: vec![],
+            },
+        ],
+        0,
+        time,
+        &vec![],
+        0,
+        0,
+        &left_to_open,
+    );
+
+    print_paths(&[&m1, &m0]);
+    return max;
+}
+
+fn print_paths(path: &[&Vec<Move>]) {
+    for i in 0..path[0].len() {
+        println!("Minute {}", i + 1);
+        for p in 0..path.len() {
+            let (m, x) = match &path[p][i] {
+                Move::Go(v, dst) => (
+                    "move to",
+                    format!("{} for {}", valve_name(v), valve_name(dst)),
+                ),
+                Move::Open(v) => ("open", String::from(valve_name(v))),
+            };
+            println!("{} {} {}", if p == 0 { "you" } else { "elephant" }, m, x);
+        }
     }
 }
 
@@ -270,4 +465,5 @@ fn main() {
     let valves = read_input();
 
     println!("Part1: {}", part1(&valves, 30));
+    println!("Part2: {}", part2(&valves, 26));
 }

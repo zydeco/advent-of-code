@@ -1,0 +1,30 @@
+digraph {
+	AA [style=filled, fillcolor=gray]
+	BB [shape="record", label="BB|13"]
+	CC [shape="record", label="CC|2"]
+	DD [shape="record", label="DD|20"]
+	EE [shape="record", label="EE|3"]
+	HH [shape="record", label="HH|22"]
+	JJ [shape="record", label="JJ|21"]
+	
+	AA -> DD
+	AA -> II
+	AA -> BB
+	BB -> CC
+	BB -> AA
+	CC -> DD
+	CC -> BB
+	DD -> CC
+	DD -> AA
+	DD -> EE
+	EE -> FF
+	EE -> DD
+	FF -> EE
+	FF -> GG
+	GG -> FF
+	GG -> HH
+	HH -> GG
+	II -> AA
+	II -> JJ
+	JJ -> II
+}
