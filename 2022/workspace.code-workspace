@@ -75,6 +75,10 @@
     {
       "path": "d18",
       "name": "Day 18"
+    },
+    {
+      "path": "d19",
+      "name": "Day 19"
     }
   ],
   "settings": {
