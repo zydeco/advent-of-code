@@ -18,105 +18,49 @@ fn read_input() -> Vec<i64> {
         .collect()
 }
 
-fn move_cursor(cursor: &mut CursorMut<(i64, bool)>, moves: i64) {
-    if moves > 0 {
-        for _ in 0..moves {
-            cursor.move_next();
-            if cursor.current().is_none() {
-                cursor.move_next();
-            }
-        }
-    } else if moves < 0 {
-        for _ in 0..-moves {
-            cursor.move_prev();
-            if cursor.current().is_none() {
-                cursor.move_prev();
-            }
-        }
-    }
-    print_list("move: ", cursor.as_cursor());
-}
-
-fn print_list(_prefix: &str, mut _cursor: Cursor<(i64, bool)>) {}
-
-fn print_list_0(prefix: &str, mut cursor: Cursor<(i64, bool)>) {
-    let mut idx = 0;
-    loop {
-        if cursor.current().is_none() {
-            break;
-        }
-        cursor.move_prev();
-        idx += 1;
-    }
-    cursor.move_next();
-    print!("{}", prefix);
-    while let Some(&(value, _moved)) = cursor.current() {
-        idx -= 1;
-        if idx == 0 {
-            print!("➡️ ");
-        }
-        print!("{}, ", value);
+fn move_cursor(cursor: &mut CursorMut<(i64, usize)>, moves: i64) {
+    assert!(moves >= 0);
+    if cursor.current().is_none() {
         cursor.move_next();
     }
-    print!("\n");
+    for _ in 0..moves {
+        cursor.move_next();
+        if cursor.current().is_none() {
+            cursor.move_next();
+        }
+    }
 }
 
-fn mix(values: &Vec<i64>) -> Vec<i64> {
+fn move_to_index(cursor: &mut CursorMut<(i64, usize)>, index: usize) -> i64 {
+    loop {
+        match cursor.current() {
+            Some((value, i)) if *i == index => return *value,
+            Some(_) | None => cursor.move_next(),
+        }
+    }
+}
+
+fn mix(values: &Vec<i64>, times: usize) -> Vec<i64> {
     let mut ll = values
         .iter()
-        .map(|i| (*i, false))
+        .enumerate()
+        .map(|(index, value)| (*value, index))
         .collect::<LinkedList<_>>();
 
-    let mut c = ll.cursor_front_mut();
+    let mut cursor = ll.cursor_front_mut();
     let max = values.len() as i64 - 1;
-    let mut num_moved = 0;
-    loop {
-        if let Some(&(value, false)) = c.as_cursor().current() {
-            let moves = if value >= 0 {
-                value % max
-            } else {
-                max - (value.abs() % max)
-            };
-            print_list(format!("moving {}:\n", value).as_str(), c.as_cursor());
 
-            num_moved += 1;
-            c.remove_current();
-            if moves == 0 {
-                c.insert_before((value, true));
-                c.move_next();
-                continue;
-            }
-            print_list("removed: ", c.as_cursor());
-
-            // move to insertion point
-            move_cursor(&mut c, moves);
-
-            // insert
-            /*if c.peek_prev().is_none() {
-                // insert at end
-                c.move_prev();
-                c.insert_before((value, true));
-                c.move_next();
-            } else*/
-            {
-                // insert here
-                c.insert_before((value, true));
-                c.move_prev();
-            }
-
-            print_list("insert: ", c.as_cursor());
-
-            // move back
-            move_cursor(&mut c, -moves);
-        } else if num_moved == values.len() {
-            break;
-        } else {
-            c.move_next();
-            continue;
+    for _ in 0..times {
+        for index in 0..=(max as usize) {
+            let value = move_to_index(&mut cursor, index);
+            let moves = value.rem_euclid(max);
+            cursor.remove_current();
+            move_cursor(&mut cursor, moves);
+            cursor.insert_before((value, index));
         }
     }
 
-    ll.iter().map(|(value, _moved)| *value).collect()
+    ll.iter().map(|(value, _index)| *value).collect()
 }
 
 fn get_wrapping(values: &Vec<i64>, index: usize) -> i64 {
@@ -131,12 +75,14 @@ fn groove_coordinates(values: &Vec<i64>) -> i64 {
 }
 
 fn part1(values: &Vec<i64>) {
-    let mixed = mix(values);
+    let mixed = mix(values, 1);
     println!("Part1 groove coords: {}", groove_coordinates(&mixed));
 }
 
 fn part2(values: &Vec<i64>) {
-    panic!("oh fuck")
+    let values2 = values.iter().map(|v| (v * 811589153)).collect();
+    let mixed = mix(&values2, 10);
+    println!("Part2 groove coords: {}", groove_coordinates(&mixed));
 }
 
 fn main() {
