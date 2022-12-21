@@ -1,7 +1,9 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     io::{self, BufRead},
 };
+
+use z3::{ast::Ast, ast::Int, Config, Context, Optimize, SatResult};
 
 type Name = [u8; 4];
 
@@ -89,45 +91,6 @@ impl Value {
         }
     }
 
-    fn can_resolve(&self, values: &HashMap<Name, Value>, unresolved: &HashSet<Name>) -> bool {
-        match self {
-            Value::Number(_) => return true,
-            Value::Compare(_, _) => return false,
-            _ => (),
-        }
-        let (lhs, rhs) = self.sides().unwrap();
-        if unresolved.contains(&lhs) || unresolved.contains(&rhs) {
-            return false;
-        }
-        let left = values.get(&lhs).unwrap();
-        let right = values.get(&rhs).unwrap();
-        left.can_resolve(values, unresolved) && right.can_resolve(values, unresolved)
-    }
-
-    fn expr(&self, values: &HashMap<Name, Value>, unresolved: &HashSet<Name>) -> String {
-        if let Value::Number(n) = self {
-            return n.to_string();
-        }
-        if self.can_resolve(values, unresolved) {
-            return self.resolve(values).to_string();
-        }
-
-        let (lhs, rhs) = self.sides().unwrap();
-        let (lhx, rhx) = (
-            if unresolved.contains(&lhs) {
-                name_to_string(&lhs)
-            } else {
-                values.get(&lhs).unwrap().expr(values, unresolved)
-            },
-            if unresolved.contains(&rhs) {
-                name_to_string(&rhs)
-            } else {
-                values.get(&rhs).unwrap().expr(values, unresolved)
-            },
-        );
-        format!("({} {} {})", self.op_str(), lhx, rhx)
-    }
-
     fn sides(&self) -> Option<(Name, Name)> {
         match self {
             Value::Number(_) => None,
@@ -139,14 +102,28 @@ impl Value {
         }
     }
 
-    fn op_str(&self) -> String {
-        match self {
-            Value::Number(n) => n.to_string(),
-            Value::Add(_, _) => "+".into(),
-            Value::Subtract(_, _) => "-".into(),
-            Value::Multiply(_, _) => "*".into(),
-            Value::Divide(_, _) => "/".into(),
-            Value::Compare(_, _) => "=".into(),
+    fn add_constraints(
+        &self,
+        name: &Name,
+        vars: &HashMap<&Name, Int>,
+        ctx: &Context,
+        opt: &Optimize,
+    ) {
+        let var = vars.get(name).unwrap();
+        if let Value::Number(n) = self {
+            opt.assert(&var._eq(&Int::from_i64(ctx, *n)));
+        } else if let Some((lhs, rhs)) = self.sides() {
+            let left_var = vars.get(&lhs).unwrap();
+            let right_var = vars.get(&rhs).unwrap();
+            let vars = &[left_var, right_var];
+            match self {
+                Value::Add(_, _) => opt.assert(&var._eq(&Int::add(&ctx, vars))),
+                Value::Subtract(_, _) => opt.assert(&var._eq(&Int::sub(&ctx, vars))),
+                Value::Multiply(_, _) => opt.assert(&var._eq(&Int::mul(&ctx, vars))),
+                Value::Divide(_, _) => opt.assert(&var._eq(&left_var.div(right_var))),
+                Value::Compare(_, _) => opt.assert(&left_var._eq(right_var)),
+                _ => unreachable!(),
+            }
         }
     }
 }
@@ -157,10 +134,37 @@ fn part1(input: &HashMap<Name, Value>) {
 }
 
 fn part2(input: &HashMap<Name, Value>) {
+    let cfg = Config::new();
+    let ctx = Context::new(&cfg);
+    let opt = Optimize::new(&ctx);
+
+    // declare variables
+    let mut vars = HashMap::new();
+    for name in input.keys() {
+        let var = Int::new_const(&ctx, name_to_string(name));
+        vars.insert(name, var);
+    }
+
+    // add constraints for all except root and humn
+    let root_name = name!(root);
+    let humn_name = name!(humn);
+    for (name, value) in input
+        .iter()
+        .filter(|(&name, _)| name != root_name && name != humn_name)
+    {
+        value.add_constraints(name, &vars, &ctx, &opt);
+    }
+
+    // add constraints for root
     let root_sides = input.get(&name!(root)).unwrap().sides().unwrap();
     let cmp_root = Value::Compare(root_sides.0, root_sides.1);
-    let unresolved = HashSet::from([name!(humn)]);
-    println!("; use z3 to solve it\n(declare-fun humn () Int)\n(assert (> humn 0))\n(assert {})\n(check-sat)\n(get-model)", cmp_root.expr(&input, &unresolved));
+    cmp_root.add_constraints(&root_name, &vars, &ctx, &opt);
+
+    // solve
+    let humn_var = vars.get(&humn_name).unwrap();
+    assert_eq!(opt.check(&[]), SatResult::Sat);
+    let m = opt.get_model().unwrap();
+    println!("human must say {}", m.eval(humn_var, true).unwrap());
 }
 
 fn main() {
