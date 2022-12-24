@@ -231,12 +231,40 @@ impl Valley {
         self.shortest_path_from_state(&all_blizzards, from, to, 0)
     }
 
-    fn shortest_path_3(&self, initial_blizzards: &Vec<Blizzard>, from: Pos, to: Pos) -> usize {
+    fn shortest_path_n(
+        &self,
+        initial_blizzards: &Vec<Blizzard>,
+        from: Pos,
+        to: Pos,
+        mut trips: usize,
+    ) -> usize {
         let all_blizzards = self.full_cycle(initial_blizzards);
-        let a = self.shortest_path_from_state(&all_blizzards, from, to, 0);
-        let b = self.shortest_path_from_state(&all_blizzards, to, from, a);
-        let c = self.shortest_path_from_state(&all_blizzards, from, to, a + b);
-        a + b + c
+        let num_blizzards = all_blizzards.len();
+        let mut paths: HashMap<(Pos, Pos, usize), usize> = HashMap::new();
+        let mut sum = self.shortest_path_from_state(&all_blizzards, from, to, 0);
+        paths.insert((from, to, 0), sum);
+        trips -= 1;
+
+        while trips > 0 {
+            // back to start
+            sum += *paths
+                .entry((to, from, sum % num_blizzards))
+                .or_insert_with(|| {
+                    self.shortest_path_from_state(&all_blizzards, to, from, sum % num_blizzards)
+                });
+            trips -= 1;
+            if trips == 0 {
+                break;
+            }
+            // and back to end again
+            sum += *paths
+                .entry((from, to, sum % num_blizzards))
+                .or_insert_with(|| {
+                    self.shortest_path_from_state(&all_blizzards, from, to, sum % num_blizzards)
+                });
+            trips -= 1;
+        }
+        sum
     }
 
     // find shortest path without calculating the actual path
@@ -342,6 +370,11 @@ fn main() {
 
     println!(
         "Path back and forth and back again: {}",
-        valley.shortest_path_3(&blizzards, valley.entry, valley.exit)
+        valley.shortest_path_n(&blizzards, valley.entry, valley.exit, 3)
+    );
+
+    println!(
+        "Path back and forth and back again 10000 times: {}",
+        valley.shortest_path_n(&blizzards, valley.entry, valley.exit, 20001)
     );
 }
