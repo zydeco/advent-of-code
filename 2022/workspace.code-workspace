@@ -95,6 +95,10 @@
     {
       "path": "d23",
       "name": "Day 23"
+    },
+    {
+      "path": "d24",
+      "name": "Day 24"
     }
   ],
   "settings": {
