@@ -23,6 +23,14 @@
     {
       "path": "d06",
       "name": "Day 6"
+    },
+    {
+      "path": "d07",
+      "name": "Day 7"
+    },
+    {
+      "path": "d07part2",
+      "name": "Day 7 part 2"
     }
   ],
   "settings": {
