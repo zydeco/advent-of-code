@@ -107,6 +107,48 @@ impl Board {
             })
             .unwrap_or(vec![])
     }
+
+    fn energized(&self, start: &Beam) -> usize {
+        let mut beams = vec![*start];
+        let mut seen = HashSet::new();
+        while let Some(beam) = beams.pop() {
+            if !seen.contains(&beam) {
+                seen.insert(beam);
+                let mut next = self.beam(beam);
+                beams.append(&mut next);
+            }
+        }
+        seen.iter()
+            .map(|(pos, _)| *pos)
+            .collect::<HashSet<Pos>>()
+            .len()
+    }
+
+    fn entry_points(&self, dir: Direction) -> Vec<Beam> {
+        match dir {
+            Direction::Up => (0..self.cols as i32)
+                .map(|col| ((self.rows as i32 - 1, col), dir))
+                .collect(),
+            Direction::Down => (0..self.cols as i32)
+                .map(|col| ((0i32, col), dir))
+                .collect(),
+            Direction::Left => (0..self.rows as i32)
+                .map(|row| ((row, self.cols as i32 - 1), dir))
+                .collect(),
+            Direction::Right => (0..self.rows as i32).map(|row| ((row, 0), dir)).collect(),
+        }
+    }
+
+    fn all_entry_points(&self) -> Vec<Beam> {
+        [
+            Direction::Up,
+            Direction::Down,
+            Direction::Left,
+            Direction::Right,
+        ]
+        .map(|dir| self.entry_points(dir))
+        .concat()
+    }
 }
 
 fn read_input() -> Board {
@@ -134,16 +176,14 @@ fn read_input() -> Board {
 
 fn main() {
     let board = read_input();
+    let start = ((0, 0), Direction::Right);
+    println!("Part 1: {}", board.energized(&start));
 
-    let mut beams = vec![((0, 0), Direction::Right)];
-    let mut seen = HashSet::new();
-    while let Some(beam) = beams.pop() {
-        if !seen.contains(&beam) {
-            seen.insert(beam);
-            let mut next = board.beam(beam);
-            beams.append(&mut next);
-        }
-    }
-    let energized = seen.iter().map(|(pos, _)| *pos).collect::<HashSet<Pos>>();
-    println!("Energized: {}", energized.len());
+    let part2 = board
+        .all_entry_points()
+        .iter()
+        .map(|entry| board.energized(entry))
+        .max()
+        .unwrap_or(0);
+    println!("Part 2: {}", part2)
 }
