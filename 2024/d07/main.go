@@ -132,6 +132,7 @@ func (q *equation) solutions(lastOp operator) []solution {
 			solution := make([]operator, len(operators))
 			copy(solution, operators)
 			solutions = append(solutions, solution)
+			break // only need one solution
 		}
 		if !incrementOperators(&operators, lastOp) {
 			break
