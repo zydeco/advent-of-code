@@ -19,12 +19,15 @@ const (
 	Robot
 	Wall
 	Box
+	BoxLeft
+	BoxRight
 )
 
 type board struct {
 	width, height int
 	tiles         map[coord]item
 	robot         coord
+	wideBoxes     bool
 }
 
 type direction int
@@ -117,7 +120,7 @@ func (d direction) String() string {
 	return "?"
 }
 
-func (c *coord) next(dir direction) coord {
+func (c coord) next(dir direction) coord {
 	switch dir {
 	case Up:
 		return coord{x: c.x, y: c.y - 1}
@@ -156,8 +159,13 @@ func (b *board) clear(c coord) {
 }
 
 func (b board) String() string {
-	s := ""
+	s := " "
+	for x := 0; x < b.width; x++ {
+		s += fmt.Sprintf("%d", x%10)
+	}
+	s += "\n"
 	for y := 0; y < b.height; y++ {
+		s += fmt.Sprintf("%d", y%10)
 		for x := 0; x < b.width; x++ {
 			xy := coord{x: x, y: y}
 			switch b.get(xy) {
@@ -169,11 +177,19 @@ func (b board) String() string {
 				s += "O"
 			case Robot:
 				s += "@"
+			case BoxLeft:
+				s += "["
+			case BoxRight:
+				s += "]"
 			}
 		}
 		s += "\n"
 	}
 	return s
+}
+
+func (d direction) isVertical() bool {
+	return d == Up || d == Down
 }
 
 func (b board) canMove(d direction) (bool, coord) {
@@ -184,12 +200,75 @@ func (b board) canMove(d direction) (bool, coord) {
 			return true, target
 		case Box:
 			target = target.next(d)
+		case BoxLeft, BoxRight:
+			if d.isVertical() {
+				return b.canMoveBigBoxVertically(target, d), target
+			}
+			target = target.next(d)
 		case Wall:
 			return false, target
 		case Robot:
 			panic("invalid geometry")
 		}
 	}
+}
+
+func (b *board) canMoveBigBoxVertically(c coord, d direction) bool {
+	return b.moveBigBoxVertically(c, d, true)
+}
+
+func (b *board) moveBigBox(to, from coord) {
+	b.clear(from)
+	b.clear(from.next(Right))
+	b.set(to, BoxLeft)
+	b.set(to.next(Right), BoxRight)
+}
+
+func (b *board) moveBigBoxVertically(c coord, d direction, dryRun bool) bool {
+	// calculate next positions
+	if b.get(c) == BoxRight {
+		return b.moveBigBoxVertically(c.next(Left), d, dryRun)
+	}
+	if b.get(c) != BoxLeft {
+		panic("wtf")
+	}
+
+	// calculate next positions
+	c1 := c.next(d)
+	c2 := c.next(Right).next(d)
+	t1 := b.get(c1)
+	t2 := b.get(c2)
+
+	// if any is wall -> no
+	// if any is box -> recurse
+	if t1 == Empty && t2 == Empty {
+		if !dryRun {
+			b.moveBigBox(c1, c)
+		}
+		return true
+	} else if t1 == Wall || t2 == Wall {
+		return false
+	} else if t1 == BoxLeft && t2 == BoxRight {
+		if b.moveBigBoxVertically(c1, d, dryRun) {
+			if !dryRun {
+				b.moveBigBox(c1, c)
+			}
+			return true
+		}
+		return false
+	} else if t1 == BoxRight || t2 == BoxLeft {
+		if t1 == BoxRight && !b.moveBigBoxVertically(c1.next(Left), d, dryRun) {
+			return false
+		}
+		if t2 == BoxLeft && !b.moveBigBoxVertically(c2, d, dryRun) {
+			return false
+		}
+		if !dryRun {
+			b.moveBigBox(c1, c)
+		}
+		return true
+	}
+	panic("unforeseen box situation")
 }
 
 func (c coord) gps() int {
@@ -199,11 +278,15 @@ func (c coord) gps() int {
 func (b board) gps() int {
 	sum := 0
 	for c, t := range b.tiles {
-		if t == Box {
+		if t == Box || t == BoxLeft {
 			sum += c.gps()
 		}
 	}
 	return sum
+}
+
+func (i item) isBigBox() bool {
+	return i == BoxLeft || i == BoxRight
 }
 
 func (b *board) move(d direction) bool {
@@ -212,15 +295,21 @@ func (b *board) move(d direction) bool {
 		return false
 	}
 
-	rd := d.reverse()
 	b.clear(b.robot)
 	b.robot = b.robot.next(d)
-	for target != b.robot {
-		next := target.next(rd)
-		b.set(target, b.get(next))
-		b.clear(next)
-		target = next
+
+	if b.wideBoxes && d.isVertical() && b.get(b.robot).isBigBox() {
+		b.moveBigBoxVertically(b.robot, d, false)
+	} else {
+		rd := d.reverse()
+		for target != b.robot {
+			next := target.next(rd)
+			b.set(target, b.get(next))
+			b.clear(next)
+			target = next
+		}
 	}
+
 	b.set(b.robot, Robot)
 
 	return true
@@ -232,7 +321,47 @@ func vprintf(format string, a ...any) {
 	}
 }
 
-func part1(b board, moves []direction) {
+func (c coord) embiggen() coord {
+	return coord{x: c.x * 2, y: c.y}
+}
+
+func (b board) embiggen() board {
+	b2 := board{
+		width:     b.width * 2,
+		height:    b.height,
+		tiles:     make(map[coord]item),
+		robot:     b.robot.embiggen(),
+		wideBoxes: true,
+	}
+	for c, t := range b.tiles {
+		c2 := c.embiggen()
+		c3 := c2.next(Right)
+		switch t {
+		case Wall:
+			b2.tiles[c2] = Wall
+			b2.tiles[c3] = Wall
+		case Box:
+			b2.tiles[c2] = BoxLeft
+			b2.tiles[c3] = BoxRight
+		}
+	}
+	b2.tiles[b2.robot] = Robot
+	return b2
+}
+
+func (b board) copy() board {
+	b2 := b
+	b2.tiles = make(map[coord]item)
+	for c, t := range b.tiles {
+		b2.tiles[c] = t
+	}
+	return b2
+}
+
+func doMoves(b board, moves []direction) {
+	b = b.copy()
+	fmt.Printf("Initial State:\n%s\n", b)
+
 	for _, m := range moves {
 		b.move(m)
 		vprintf("Move %s:\n%s\n", m, b)
@@ -242,11 +371,15 @@ func part1(b board, moves []direction) {
 		fmt.Printf("End state:\n%s\n", b)
 	}
 	gps := b.gps()
-	fmt.Println("Part 1:", gps)
+	fmt.Println("Result:", gps)
 }
 
 func main() {
 	board, moves := readInput()
-	fmt.Printf("Input:\n%s\n", board)
-	part1(board, moves)
+	fmt.Println("Part 1:")
+	doMoves(board, moves)
+
+	fmt.Println("Part 2:")
+	board2 := board.embiggen()
+	doMoves(board2, moves)
 }
