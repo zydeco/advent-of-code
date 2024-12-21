@@ -175,9 +175,9 @@ func makeMoves(fromRow, fromCol, toRow, toCol, avoidRow, avoidCol int) DPadSeque
 			moves = append(moves, moveToRow(fromRow, toRow)...)
 			moves = append(moves, moveToCol(fromCol, toCol)...)
 		} else {
-			// anything else
-			moves = append(moves, moveToCol(fromCol, toCol)...)
+			// up or right
 			moves = append(moves, moveToRow(fromRow, toRow)...)
+			moves = append(moves, moveToCol(fromCol, toCol)...)
 		}
 	}
 
@@ -224,6 +224,15 @@ func (s DPadSequence) dpadMoves() DPadSequence {
 	return moves
 }
 
+func (s DPadSequence) dpadMovesFrom(currentButton DPadButton) DPadSequence {
+	moves := make(DPadSequence, 0, 4)
+	for _, nextButton := range s {
+		moves = append(moves, dpadMoves(currentButton, nextButton)...)
+		currentButton = nextButton
+	}
+	return moves
+}
+
 func (s DPadSequence) String() string {
 	str := ""
 	for _, b := range s {
@@ -240,8 +249,65 @@ func part1(codes []code) {
 	fmt.Println("Complexity", complexity)
 }
 
+type movesCacheKey struct {
+	from, to DPadButton
+	level    int
+}
+
+var movesCountCache = make(map[movesCacheKey]int)
+
+func moves(from, to DPadButton, layers int) int {
+	cacheKey := movesCacheKey{from: from, to: to, level: layers}
+	count := movesCountCache[cacheKey]
+	if count > 0 {
+		// in cache
+		return count
+	}
+	currentMoves := DPadSequence{to}.dpadMovesFrom(from)
+	if layers == 0 {
+		count = len(currentMoves)
+		movesCountCache[cacheKey] = count
+		return count
+	}
+
+	// count recursively without storing everything
+	previousButton := DPActivate
+	for _, button := range currentMoves {
+		count += moves(previousButton, button, layers-1)
+		previousButton = button
+	}
+	movesCountCache[cacheKey] = count
+	return count
+}
+
+func part2(codes []code, layers int) {
+	complexity := 0
+	for _, code := range codes {
+		codeComplexity := 0
+		previousButton := DPActivate
+		for _, button := range code.keypadMoves() {
+			codeComplexity += moves(previousButton, button, layers-1)
+			previousButton = button
+		}
+		complexity += codeComplexity * code.numericValue()
+	}
+
+	fmt.Println("Complexity", complexity)
+	if layers == 25 {
+		if complexity < 204040805018350 {
+			fmt.Println("Too low")
+		} else if complexity > 204040805018350 {
+			fmt.Println("Too high")
+		} else {
+			fmt.Println("Correct")
+		}
+	}
+}
+
 func main() {
 	codes := readInput()
 	fmt.Println("Input:", codes)
 	part1(codes)
+	part2(codes, 2)
+	part2(codes, 25)
 }
