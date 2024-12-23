@@ -11,7 +11,7 @@ type computer [2]byte
 
 type connection [2]computer
 
-type party [3]computer
+type party []computer
 
 func (c computer) String() string {
 	return fmt.Sprintf("%c%c", c[0], c[1])
@@ -22,7 +22,11 @@ func (c connection) String() string {
 }
 
 func (p party) String() string {
-	return fmt.Sprintf("%s,%s,%s", p[0], p[1], p[2])
+	s := p[0].String()
+	for i := 1; i < len(p); i++ {
+		s += fmt.Sprintf(",%s", p[i])
+	}
+	return s
 }
 
 func compareComputers(c1, c2 computer) int {
@@ -38,8 +42,7 @@ func (c connection) sorted() connection {
 }
 
 func (p party) sorted() party {
-	sorted := slices.SortedFunc(slices.Values(p[:]), compareComputers)
-	return party{sorted[0], sorted[1], sorted[2]}
+	return slices.SortedFunc(slices.Values(p[:]), compareComputers)
 }
 
 func readInput() []connection {
@@ -75,15 +78,37 @@ func parseConnections(connections []connection) ([]computer, map[connection]bool
 }
 
 func (p party) isConnected(connections map[connection]bool) bool {
-	conn1 := connection{p[0], p[1]}.sorted()
-	conn2 := connection{p[1], p[2]}.sorted()
-	conn3 := connection{p[2], p[0]}.sorted()
-	return connections[conn1] && connections[conn2] && connections[conn3]
+	for i := 0; i < len(p); i++ {
+		for j := i + 1; j < len(p); j++ {
+			conn := connection{p[i], p[j]}.sorted()
+			if !connections[conn] {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (p party) isConnectedTo(c computer, connections map[connection]bool) bool {
+	// assume party is already connected
+	for i := 0; i < len(p); i++ {
+		conn := connection{p[i], c}.sorted()
+		if !connections[conn] {
+			return false
+		}
+	}
+	return true
 }
 
 func (p party) maybeHasChief() bool {
 	// any computer starts with 't'
-	return p[0][0] == 't' || p[1][0] == 't' || p[2][0] == 't'
+	has := false
+	for i := 0; i < len(p); i++ {
+		if p[i][0] == 't' {
+			has = true
+		}
+	}
+	return has
 }
 
 func part1(computers []computer, connections map[connection]bool) {
@@ -101,9 +126,47 @@ func part1(computers []computer, connections map[connection]bool) {
 	fmt.Printf("Part 1: %d\n", len(parties))
 }
 
+func (c computer) connectedComputers(connections map[connection]bool) party {
+	connectedComputers := make([]computer, 0, 16)
+	for conn := range connections {
+		if conn[0] == c {
+			connectedComputers = append(connectedComputers, conn[1])
+		} else if conn[1] == c {
+			connectedComputers = append(connectedComputers, conn[0])
+		}
+	}
+	slices.SortFunc(connectedComputers, compareComputers)
+	return connectedComputers
+}
+
+func (c computer) connectedParty(connections map[connection]bool) party {
+	party := make(party, 0, 16)
+	party = append(party, c)
+	for conn := range connections {
+		if conn[0] == c && party.isConnectedTo(conn[1], connections) {
+			party = append(party, conn[1])
+		} else if conn[1] == c && party.isConnectedTo(conn[0], connections) {
+			party = append(party, conn[0])
+		}
+	}
+	slices.SortFunc(party, compareComputers)
+	return party
+}
+
+func part2(computers []computer, connections map[connection]bool) {
+	largestParty := make(party, 0)
+	for _, c := range computers {
+		party := c.connectedParty(connections)
+		if len(party) > len(largestParty) {
+			largestParty = party
+		}
+	}
+	fmt.Printf("Part 2: %s (%d)\n", largestParty, len(largestParty))
+}
+
 func main() {
 	input := readInput()
 	computers, connections := parseConnections(input)
-	fmt.Println("Input:", input)
 	part1(computers, connections)
+	part2(computers, connections)
 }
