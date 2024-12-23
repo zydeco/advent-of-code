@@ -112,31 +112,19 @@ func (p party) maybeHasChief() bool {
 }
 
 func part1(computers []computer, connections map[connection]bool) {
-	parties := make([]party, 0)
-	for i := 0; i < len(computers); i++ {
-		for j := i + 1; j < len(computers); j++ {
-			for k := j + 1; k < len(computers); k++ {
-				party := party{computers[i], computers[j], computers[k]}.sorted()
-				if party.isConnected(connections) && party.maybeHasChief() {
-					parties = append(parties, party)
-				}
+	matchingParties := make(map[[3]computer]bool)
+	for conn := range connections {
+		for _, c := range computers {
+			if c == conn[0] || c == conn[1] {
+				continue
+			}
+			party := party{conn[0], conn[1], c}.sorted()
+			if party.isConnected(connections) && party.maybeHasChief() {
+				matchingParties[[3]computer(party)] = true
 			}
 		}
 	}
-	fmt.Printf("Part 1: %d\n", len(parties))
-}
-
-func (c computer) connectedComputers(connections map[connection]bool) party {
-	connectedComputers := make([]computer, 0, 16)
-	for conn := range connections {
-		if conn[0] == c {
-			connectedComputers = append(connectedComputers, conn[1])
-		} else if conn[1] == c {
-			connectedComputers = append(connectedComputers, conn[0])
-		}
-	}
-	slices.SortFunc(connectedComputers, compareComputers)
-	return connectedComputers
+	fmt.Printf("Part 1: %d\n", len(matchingParties))
 }
 
 func (c computer) connectedParty(connections map[connection]bool) party {
